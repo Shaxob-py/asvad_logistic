@@ -1,0 +1,16 @@
+[project]
+name = "adler"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.30.0",
+    "asyncpg>=0.31.0",
+    "excel>=1.0.1",
+    "msoffcrypto-tool>=6.0.0",
+    "openpyxl>=3.1.5",
+    "pydantic-settings>=2.14.2",
+    "requests>=2.34.2",
+    "sqlalchemy>=2.0.51",
+    "uv>=0.12.0",
+]

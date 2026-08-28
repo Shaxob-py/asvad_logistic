@@ -1,0 +1,112 @@
+import asyncio
+import datetime
+from venv import logger
+
+from aiogram import F, Router
+from aiogram.exceptions import TelegramNetworkError
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message, BufferedInputFile
+
+from core.core import bot
+from db.adler import Entry, GroupEntry
+from utils.gen_excel import generate_summary_excel, get_inkassatsiya_row
+from utils.key import reply_buttons
+from utils.state import AdminState
+from utils.utils import find_company_and_code, safe_answer, normalize_city
+
+router_admin = Router()
+
+
+@router_admin.message(Command("start"))
+async def command_start_handler(message: Message, state: FSMContext) -> None:
+    button = ["Sverka Fin Otchet chiqarish", "Rashod Exel Kiritish", "Check tashaganlarni korish"]
+    await message.answer("Assalomu alekum nima qilmoqchisiz", reply_markup=reply_buttons(button))
+    await state.set_state(AdminState.register_admin)
+
+
+@router_admin.message(F.document, AdminState.get_document)
+async def command_register_admin(message: Message, state: FSMContext) -> None:
+    try:
+        doc = message.document
+        file = await bot.get_file(doc.file_id)
+        file_bytes_io = await bot.download_file(file.file_path)
+        file_bytes = file_bytes_io.read()
+
+        company_type, region, code = find_company_and_code(doc.file_name)
+
+        if code is None:
+            await message.answer(f"Bu fayl bilan hatolik yuz berdi: {doc.file_name}")
+            return
+
+        data = await state.get_data()
+        date_str = data.get("date")
+        target_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+
+        region = normalize_city(region)
+        print(region)
+
+        group_entry = await GroupEntry.get_by_region_date(region, target_date, company_type)
+
+        balance_before, amount, balance_after = await asyncio.to_thread(
+            get_inkassatsiya_row,
+            file_bytes,
+            code,
+            target_date,
+            group_entry
+        )
+        await Entry.create_or_update(
+            region=region,
+            inkassatsiya_amount=amount,
+            company=company_type,
+            date=target_date,
+            balance_before=balance_before,
+            balance_after=balance_after
+        )
+
+
+
+    except TelegramNetworkError:
+        await safe_answer(message, "Xatolik yuz berdi, qayta urinib ko'ring")
+    except Exception as e:
+        await safe_answer(message, "Kutilmagan xatolik yuz berdi, qayta urinib ko'ring")
+        logger.exception("command_register_admin failed: %s", e)
+
+
+@router_admin.message(F.text == "Rashod Exel Kiritish", AdminState.register_admin)
+async def command__admin(message: Message, state: FSMContext) -> None:
+    await message.answer("Qaysi kunni rashodini olishim kerak. Masalan -> kun-oy-yil  shu formatta kiriting")
+    await state.set_state(AdminState.get_date_for_excel)
+
+
+@router_admin.message(AdminState.get_date_for_excel)
+async def command__admin(message: Message, state: FSMContext) -> None:
+    await message.answer('Documentlarni yuboring')
+    date = message.text
+    await state.update_data(date=date)
+    await state.set_state(AdminState.get_document)
+
+
+@router_admin.message(F.text == "Sverka Fin Otchet chiqarish", AdminState.register_admin)
+async def command_fin_document(message: Message, state: FSMContext) -> None:
+    await message.answer('Qaysi kunniki sverka fin otchet kerak.Masalan -> kun-oy-yil  shu formatta kiriting')
+    await state.set_state(AdminState.generate_excel)
+
+
+@router_admin.message(AdminState.generate_excel)
+async def command_generate_excel(message: Message, state: FSMContext) -> None:
+    target_date = datetime.datetime.strptime(message.text, '%Y-%m-%d').date()
+
+    entries = await Entry.select_months(target_date)
+
+    generate_summary_excel(target_date, entries)
+    excel_bytes = generate_summary_excel(target_date, entries)
+    await message.answer_document(BufferedInputFile(excel_bytes, filename=f"summary_{target_date}.xlsx"))
+    await state.set_state(AdminState.register_admin)
+    button = ["Sverka Fin Otchet chiqarish", "Rashod Exel Kiritish", "Check tashaganlarni korish"]
+    await message.answer("Assalomu alekum nima qilmoqchisiz", reply_markup=reply_buttons(button))
+
+
+@router_admin.message(AdminState.register_admin, F.text == "Check tashaganlarni korish")
+async def get_check(message: Message, state: FSMContext) -> None:
+    pass
