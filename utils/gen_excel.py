@@ -8,6 +8,7 @@ from db.adler import TypeCompany
 def get_inkassatsiya_row(file_bytes: bytes, password: str, target_date: datetime.date,
                           group_entry,
                           date_col=1, statya_col=2, amount_col=6, balance_col=7):
+
     decrypted = io.BytesIO()
     office_file = msoffcrypto.OfficeFile(io.BytesIO(file_bytes))
     office_file.load_key(password=password)
