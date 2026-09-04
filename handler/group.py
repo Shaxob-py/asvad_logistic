@@ -14,6 +14,7 @@ router_group = Router()
 
 @router_group.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), F.photo)
 async def group_handler(message: Message):
+    print(message.chat.id)
     if message.chat.id == settings.GROUP_CHAT_ID_ADLER:
         type_company = Report.TypeCompany.ADLER
     elif message.chat.id == settings.GROUP_CHAT_ID_GATTER:
@@ -30,10 +31,9 @@ async def group_handler(message: Message):
 
 @router_group.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), F.text)
 async def group_handler(message: Message):
-    if message.chat.id == settings.GROUP_CHAT_ID_ADLER:
+    print(message.chat.id)
+    if message.chat.id == settings.GROUP_CHAT_ID_AMOUNT:
         type_company = TypeCompany.ADLER
-    elif message.chat.id == settings.GROUP_CHAT_ID_GATTER:
-        type_company = TypeCompany.GATTER
     else:
         return
     entr, errors = parse_inkassatsiya_message(message.text)

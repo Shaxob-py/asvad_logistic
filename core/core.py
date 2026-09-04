@@ -18,8 +18,8 @@ class Settings(BaseSettings):
 
     BOT_TOKEN: str
 
-    GROUP_CHAT_ID_ADLER: int
-    GROUP_CHAT_ID_GATTER: int
+    GROUP_CHAT_ID_AMOUNT: int
+
 
     class Config:
         env_file = ".env"

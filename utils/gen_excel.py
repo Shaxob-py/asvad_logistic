@@ -2,13 +2,12 @@ import datetime
 
 import msoffcrypto
 
-from db.adler import TypeCompany
+from db.adler import TypeCompany, GroupEntry
 
 
 def get_inkassatsiya_row(file_bytes: bytes, password: str, target_date: datetime.date,
-                          group_entry,
-                          date_col=1, statya_col=2, amount_col=6, balance_col=7):
-
+                         group_entry,
+                         date_col=1, statya_col=2, amount_col=6, balance_col=7):
     decrypted = io.BytesIO()
     office_file = msoffcrypto.OfficeFile(io.BytesIO(file_bytes))
     office_file.load_key(password=password)
@@ -52,7 +51,6 @@ def get_inkassatsiya_row(file_bytes: bytes, password: str, target_date: datetime
                 return r
         return None
 
-
     found = find_matching_row(target_date)
     if found is not None:
         return found["balance_before"], group_entry.inkassatsiya_amount, found["balance_after"]
@@ -63,7 +61,6 @@ def get_inkassatsiya_row(file_bytes: bytes, password: str, target_date: datetime
     if found is not None:
         return found["balance_before"], group_entry.inkassatsiya_amount, found["balance_after"]
 
-
     prev_rows = rows_by_date.get(prev_date, [])
     if prev_rows:
         balance_before = prev_rows[-1]["balance_after"]  # последний известный остаток
@@ -72,13 +69,13 @@ def get_inkassatsiya_row(file_bytes: bytes, password: str, target_date: datetime
 
     return None, group_entry.inkassatsiya_amount, None
 
+
 # generate Excel
 
-import io
 from datetime import date
 
 import openpyxl
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl.styles import Border, Side
 
 CANONICAL_CITIES = [
     "Самарканд", "Карши", "Наманган", "Андижон", "Термез", "Алмалык",
@@ -173,3 +170,94 @@ def generate_summary_excel(target_date: date, entries: list) -> bytes:
     wb.save(buf)
     buf.seek(0)
     return buf.read()
+
+
+# Стили под каждую компанию: цвет заголовка + цвет шрифта заголовка
+COMPANY_STYLES = {
+    "ADLER": {
+        "header_fill": "FF1F4E78",   # тёмно-синий
+        "header_font": "FFFFFFFF",   # белый текст
+    },
+    "GATTER": {
+        "header_fill": "FF7F6000",   # тёмно-жёлтый/охра
+        "header_font": "FFFFFFFF",
+    },
+}
+
+DEFAULT_STYLE = {
+    "header_fill": "FF808080",  # серый — на случай новой компании
+    "header_font": "FFFFFFFF",
+}
+import io
+from io import BytesIO
+
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+
+
+# Цвет строки для каждой компании (заливка данных, не только заголовка)
+COMPANY_ROW_COLORS = {
+    "ADLER": "FFD9E1F2",   # светло-синий
+    "GATTER": "FFFCE4B4",  # светло-жёлтый/охра
+}
+
+DEFAULT_ROW_COLOR = "FFEFEFEF"  # серый — на случай новой/незнакомой компании
+
+HEADER_FILL = "FF404040"
+HEADER_FONT = "FFFFFFFF"
+
+
+def generate_inkassatsiya_excel(data: list[GroupEntry]) -> BytesIO:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Инкассация"
+
+    # Заголовки
+    ws.append([
+        "Компания",
+        "Дата",
+        "Регион",
+        "Сумма инкассации",
+    ])
+
+    header_fill = PatternFill(start_color=HEADER_FILL, end_color=HEADER_FILL, fill_type="solid")
+    header_font = Font(bold=True, color=HEADER_FONT)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Данные — все компании на одном листе, но с разной заливкой строки
+    for item in data:
+        company = item.company.value  # ADLER / GATTER
+        row_color = COMPANY_ROW_COLORS.get(company, DEFAULT_ROW_COLOR)
+        fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+
+        ws.append([
+            company,
+            item.date,
+            item.region,
+            item.inkassatsiya_amount,
+        ])
+
+        for cell in ws[ws.max_row]:
+            cell.fill = fill
+
+    # Автоматическая ширина колонок
+    for column in ws.columns:
+        max_length = 0
+        for cell in column:
+            if cell.value is not None:
+                max_length = max(max_length, len(str(cell.value)))
+        column_letter = get_column_letter(column[0].column)
+        ws.column_dimensions[column_letter].width = max_length + 2
+
+    # Закрепить заголовок
+    ws.freeze_panes = "A2"
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return output

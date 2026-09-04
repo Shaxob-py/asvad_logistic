@@ -60,3 +60,11 @@ class GroupEntry(CreatedModel):
             query = select(cls).where(cls.region == region, cls.date == target_date, cls.company == company)
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_all(cls):
+        async with db.session() as session:
+            query = select(cls)
+            result = await session.execute(query)
+            return result.scalars().all()
+
