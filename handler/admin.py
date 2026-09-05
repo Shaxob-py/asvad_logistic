@@ -18,17 +18,17 @@ from utils.utils import find_company_and_code, safe_answer, normalize_city
 router_admin = Router()
 
 
-# class AdminMiddleware(BaseMiddleware):
-#     async def __call__(self, handler, event, data):
-#         user_id = event.from_user.id
-#
-#         if user_id not in [5121755384]:
-#             return
-#
-#         return await handler(event, data)
-#
-#
-# router_admin.message.middleware(AdminMiddleware())
+class AdminMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        user_id = event.from_user.id
+
+        if user_id not in [5121755384]:
+            return
+
+        return await handler(event, data)
+
+
+router_admin.message.middleware(AdminMiddleware())
 
 
 @router_admin.message(AdminState.get_document , F.text=="Orqaga ⬅️")
